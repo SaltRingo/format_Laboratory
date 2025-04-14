@@ -2,6 +2,7 @@ from flask import Flask, render_template, request
 
 app = Flask(__name__)
 
+# 必要なフィールド名（スプレッドシートの順に対応）
 FIELDS = [
     "Abbreviation", "Presentation Date", "Author", "Title", "Conference",
     "Publisher", "Volume", "Number", "Presentation Number", "Page",
@@ -9,23 +10,22 @@ FIELDS = [
 ]
 
 def fill_fields(raw_cells):
-    # 最初の不要な3つをスキップ
+    # 先頭の3列（◯）は無視
     cells = raw_cells[3:]
-    # 必要な14列に切り出して、不足している場合は "未入力" で補完
-    while len(cells) < 17:
+    while len(cells) < len(FIELDS):
         cells.append("")
 
+    # 空のセルは「未入力」で補完
     info = {}
     for i, key in enumerate(FIELDS):
-        value = cells[i] if cells[i] else "未入力"
-        info[key] = value
+        info[key] = cells[i].strip() if cells[i].strip() else "未入力"
     return info
 
 def format_text(info):
     import datetime
     import re
 
-    # 日付整形
+    # 日付の整形
     try:
         date_obj = datetime.datetime.strptime(info["Presentation Date"], "%Y/%m/%d")
         weekday = "日月火水木金土"[date_obj.weekday()]
@@ -33,18 +33,26 @@ def format_text(info):
     except Exception:
         formatted_date = info["Presentation Date"]
 
-    # 時間・セッション抽出
+    # セッション情報から時間抽出（表記揺れ対応）
     session_info = info["Presentation Number"]
-    time_match = re.search(r'\d{1,2}[:：]\d{2}〜\d{1,2}[:：]\d{2}', session_info)
-    time_str = time_match.group().replace("：", ":").replace("〜", "-") if time_match else "未入力"
 
-    session_code_match = re.search(r'[0-9A-Z\-]+', session_info)
+    time_match = re.search(r'(\d{1,2}[:：]\d{2})[^0-9:：]{0,10}(\d{1,2}[:：]\d{2})', session_info)
+    if time_match:
+        start_time = time_match.group(1).replace("：", ":")
+        end_time = time_match.group(2).replace("：", ":")
+        time_str = f"{start_time}-{end_time}"
+    else:
+        time_str = "未入力"
+
+    # セッションコード（最初の英数字記号群）
+    session_code_match = re.search(r'[0-9A-Z]+(?:-[0-9A-Z]+)?', session_info)
     session_code = session_code_match.group() if session_code_match else "未入力"
 
-    # フォーマット出力
-    output = f"""{info['Conference']}
+    # ConferenceとAbbreviationの重複確認
+    abbreviation_line = f"\n<{info['Abbreviation']}>" if info["Abbreviation"] not in info["Conference"] else ""
 
-<{info['Abbreviation']}（AI）>
+    # 出力整形
+    output = f"""{info['Conference']}{abbreviation_line}
 
 {info['Author'].replace('，', ', ')}:
 **_{info['Title']}_**
