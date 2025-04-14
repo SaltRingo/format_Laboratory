@@ -1,8 +1,10 @@
 from flask import Flask, render_template, request
+from collections import defaultdict
+import datetime
+import re
 
 app = Flask(__name__)
 
-# 必要なフィールド名（スプレッドシートの順に対応）
 FIELDS = [
     "Abbreviation", "Presentation Date", "Author", "Title", "Conference",
     "Publisher", "Volume", "Number", "Presentation Number", "Page",
@@ -10,70 +12,77 @@ FIELDS = [
 ]
 
 def fill_fields(raw_cells):
-    # 先頭の3列（◯）は無視
     cells = raw_cells[3:]
     while len(cells) < len(FIELDS):
         cells.append("")
-
-    # 空のセルは「未入力」で補完
     info = {}
     for i, key in enumerate(FIELDS):
         info[key] = cells[i].strip() if cells[i].strip() else "未入力"
     return info
 
-def format_text(info):
-    import datetime
-    import re
-
-    # 日付の整形
+def format_date(date_str):
     try:
-        date_obj = datetime.datetime.strptime(info["Presentation Date"], "%Y/%m/%d")
+        date_obj = datetime.datetime.strptime(date_str, "%Y/%m/%d")
         weekday = "日月火水木金土"[date_obj.weekday()]
-        formatted_date = f"{date_obj.month}/{date_obj.day}({weekday})"
+        return f"{date_obj.month}/{date_obj.day}({weekday})"
     except Exception:
-        formatted_date = info["Presentation Date"]
+        return date_str
 
-    # セッション情報から時間抽出（表記揺れ対応）
-    session_info = info["Presentation Number"]
+def extract_time(session_info):
+    match = re.search(r'(\d{1,2}[:：]\d{2})[^0-9:：]{0,10}(\d{1,2}[:：]\d{2})', session_info)
+    if match:
+        start_time = match.group(1).replace("：", ":")
+        end_time = match.group(2).replace("：", ":")
+        return f"{start_time}-{end_time}"
+    return "未入力"
 
-    time_match = re.search(r'(\d{1,2}[:：]\d{2})[^0-9:：]{0,10}(\d{1,2}[:：]\d{2})', session_info)
-    if time_match:
-        start_time = time_match.group(1).replace("：", ":")
-        end_time = time_match.group(2).replace("：", ":")
-        time_str = f"{start_time}-{end_time}"
-    else:
-        time_str = "未入力"
+def extract_session_code(session_info):
+    match = re.search(r'[0-9A-Z]+(?:-[0-9A-Z]+)?', session_info)
+    return match.group() if match else "未入力"
 
-    # セッションコード（最初の英数字記号群）
-    session_code_match = re.search(r'[0-9A-Z]+(?:-[0-9A-Z]+)?', session_info)
-    session_code = session_code_match.group() if session_code_match else "未入力"
+def format_entry(info):
+    formatted_date = format_date(info["Presentation Date"])
+    time_str = extract_time(info["Presentation Number"])
+    session_code = extract_session_code(info["Presentation Number"])
+    return f"{info['Author'].replace('，', ', ')}:\n**_{info['Title']}_**\n{formatted_date} {time_str} {session_code} セッション ({info['Page']})"
 
-    # ConferenceとAbbreviationの重複確認
-    abbreviation_line = f"\n<{info['Abbreviation']}>" if info["Abbreviation"] not in info["Conference"] else ""
+def group_entries(entries):
+    grouped = defaultdict(list)
+    for entry in entries:
+        key = (entry["Conference"], entry["Abbreviation"])
+        grouped[key].append(entry)
+    return grouped
 
-    # 出力整形
-    output = f"""{info['Conference']}{abbreviation_line}
+def format_all(entries):
+    grouped = group_entries(entries)
+    output_lines = []
+    shown_conferences = set()
 
-{info['Author'].replace('，', ', ')}:
-**_{info['Title']}_**
-{formatted_date} {time_str} {session_code} セッション ({info['Page']})
-""".strip()
+    for (conf, abbr), group in grouped.items():
+        if conf not in shown_conferences:
+            output_lines.append(conf)
+            shown_conferences.add(conf)
+        if abbr != "未入力" and abbr not in conf:
+            output_lines.append(f"\n<{abbr}>\n")
+        else:
+            output_lines.append("")
+        for entry in group:
+            output_lines.append(format_entry(entry))
+            output_lines.append("")  # 改行を各発表後に追加
 
-    return output
+    return "\n".join(line for line in output_lines if line.strip())
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    formatted = ''
     input_text = ''
-    field_map = {}
-
+    formatted = ''
     if request.method == 'POST':
         input_text = request.form['input_text']
-        cells = input_text.strip().split('\t')
-        field_map = fill_fields(cells)
-        formatted = format_text(field_map)
+        rows = [line for line in input_text.strip().split('\n') if line.strip()]
+        entries = [fill_fields(row.split('\t')) for row in rows]
+        formatted = format_all(entries)
 
-    return render_template('index.html', input_text=input_text, formatted=formatted, field_map=field_map)
+    return render_template('index.html', input_text=input_text, formatted=formatted)
 
 if __name__ == '__main__':
     app.run(debug=True)
