@@ -7,7 +7,10 @@
     body { font-family: sans-serif; padding: 2rem; background: #f7f7f7; }
     textarea, pre { width: 100%; font-size: 1rem; }
     .button { background: #3182ce; color: white; padding: 0.5rem 1rem; border: none; cursor: pointer; }
-    .output { background: #fff; padding: 1rem; border: 1px solid #ccc; white-space: pre-wrap; }
+    .output { background: #fff; padding: 1rem; border: 1px solid #ccc; white-space: pre-wrap; margin-top: 1rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem; }
+    th { background: #eee; }
   </style>
 </head>
 <body>
@@ -21,6 +24,14 @@
   {% if formatted %}
     <h2>整形された出力：</h2>
     <div class="output">{{ formatted }}</div>
+
+    <h3>入力されたフィールド情報：</h3>
+    <table>
+      <tr><th>項目名</th><th>内容</th></tr>
+      {% for key, value in field_map.items() %}
+        <tr><td>{{ key }}</td><td>{{ value }}</td></tr>
+      {% endfor %}
+    </table>
   {% endif %}
 </body>
 </html>
