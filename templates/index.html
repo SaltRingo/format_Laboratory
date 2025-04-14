@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>発表情報フォーマッター</title>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; background: #f7f7f7; }
+    textarea, pre { width: 100%; font-size: 1rem; }
+    .button { background: #3182ce; color: white; padding: 0.5rem 1rem; border: none; cursor: pointer; }
+    .output { background: #fff; padding: 1rem; border: 1px solid #ccc; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>発表情報フォーマッター</h1>
+  <form method="POST">
+    <label>スプレッドシートの1行を貼り付けてください：</label><br>
+    <textarea name="input_text" rows="6" required>{{ input_text }}</textarea><br><br>
+    <button type="submit" class="button">整形</button>
+  </form>
+
+  {% if formatted %}
+    <h2>整形された出力：</h2>
+    <div class="output">{{ formatted }}</div>
+  {% endif %}
+</body>
+</html>
